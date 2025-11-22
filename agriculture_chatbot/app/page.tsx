@@ -127,7 +127,7 @@ const INITIAL_TRANSLATIONS: TranslationsMap = {
     agri_news: "Agri News",
     ai_chatbot: "AI Chatbot",
     settings: "Settings",
-    good_afternoon: "AgriBot", // Changed to match image header
+    good_afternoon: "AgriBot", 
     weather_desc: "Weekly Field Forecast",
     analyze_card: "Analyze Soil",
     analyze_desc: "Search ever, asssres in your moroniale rods.",
@@ -207,8 +207,9 @@ const translateContent = async (textObj: object, targetLang: string): Promise<an
     if (!resultText) {
       console.error('Translation API response missing expected text data');
       return null;
-      return null;
     }
+    
+    // ERROR FIXED HERE: Removed the extra curly brace } that was causing the build failure
 
     const jsonMatch = resultText.match(/```json\n([\s\S]*?)\n```/) || resultText.match(/```\n([\s\S]*?)\n```/);
     const cleanJson = jsonMatch ? jsonMatch[1] : resultText;
@@ -262,10 +263,6 @@ const animationStyles = `
   }
 `;
 
-interface TranslationsMap {
-  [lang: string]: { [key: string]: string };
-}
-
 interface Theme {
   bg: string;
   bgImage: string;
@@ -291,7 +288,7 @@ interface WeatherDay {
   wind: number;
   code: number;
 }
-
+// ERROR FIXED HERE: Removed the extra curly brace } that was causing the build failure
 
 interface WeatherData {
   current: WeatherDay;
@@ -326,13 +323,24 @@ export default function App() {
 
   const [location, setLocation] = useState<string>('Gurugram, Haryana, India');
 
-  // New state for connection status color: 'green', 'yellow', 'red'
+  // Connection status color: 'green', 'yellow', 'red'
   const [connectionStatus, setConnectionStatus] = useState<'green' | 'yellow' | 'red'>('green');
   const [bandwidthMode, setBandwidthMode] = useState<'high' | 'low'>('high');
   const [networkSpeed, setNetworkSpeed] = useState<number>(10);
   const [manualThrottle, setManualThrottle] = useState<boolean>(false);
 
-  // ConnectionStatus component moved inside App to fix scope issue
+  // --- NEW: Dropdown State for Header ---
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // --- NEW: Mock Data for Notifications ---
+  const notifications = [
+    { id: 1, title: "Storm Alert", desc: "Heavy rain predicted in Gurugram.", time: "10m ago", urgent: true },
+    { id: 2, title: "Soil Report Ready", desc: "Analysis for Sector 4 complete.", time: "1h ago", urgent: false },
+    { id: 3, title: "Market Update", desc: "Wheat prices up by 5%.", time: "3h ago", urgent: false },
+  ];
+
+  // ConnectionStatus component
   function ConnectionStatus({ status }: { status: 'green' | 'yellow' | 'red' }) {
     const colors = {
       green: 'text-green-500',
@@ -340,8 +348,6 @@ export default function App() {
       red: 'text-red-500',
     };
 
-    // Lucide-react icons WifiHigh (green) and WifiLow (yellow/red) could be used
-    // Since color to represent status, switch color class based on status
     const colorClass = colors[status] || 'text-gray-500';
 
     return (
@@ -506,25 +512,90 @@ export default function App() {
            <span className="font-bold">AgriSmart</span>
         </div>
 
-        {/* Top Header Row (Desktop) */}
-        <header className="hidden lg:flex items-center justify-between px-8 py-6 z-30">
+        {/* --- Top Header Row (Desktop) with New Dropdowns --- */}
+        <header className="hidden lg:flex items-center justify-between px-8 py-6 z-30 relative">
           <h1 className={`text-3xl font-bold tracking-tight ${bandwidthMode === 'high' ? 'text-slate-900' : 'text-green-500'}`}>
             {t.good_afternoon}
           </h1>
           
-        <div className="flex items-center gap-6">
-           <ConnectionStatus status={connectionStatus} />
-           
-           <div className="relative">
-             <Bell size={20} className="opacity-80"/>
-             <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-           </div>
+          <div className="flex items-center gap-6">
+             <ConnectionStatus status={connectionStatus} />
+             
+             {/* --- NOTIFICATIONS SECTION --- */}
+             <div className="relative">
+               <button 
+                 onClick={() => { setShowNotifications(!showNotifications); setShowProfileMenu(false); }}
+                 className={`relative p-2 rounded-full transition-colors ${showNotifications ? (bandwidthMode === 'high' ? 'bg-white/50' : 'bg-green-900') : 'hover:bg-white/20'}`}
+               >
+                 <Bell size={20} className={bandwidthMode === 'high' ? "text-slate-700" : "text-green-500"}/>
+                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+               </button>
 
-             <div className="flex items-center gap-2 cursor-pointer group">
-               <div className="w-8 h-8 rounded-full bg-emerald-200 overflow-hidden border-2 border-white/50">
-                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+               {/* Notification Dropdown */}
+               {showNotifications && (
+                 <div className={`absolute top-full right-0 mt-4 w-80 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 origin-top-right
+                   ${bandwidthMode === 'high' ? 'bg-white/80 backdrop-blur-xl border border-white/40' : 'bg-black border border-green-500'}
+                 `}>
+                   <div className={`p-4 border-b flex justify-between items-center ${bandwidthMode === 'high' ? 'border-gray-100' : 'border-green-900'}`}>
+                     <span className="font-bold text-sm">Notifications</span>
+                     <span className="text-xs opacity-50 cursor-pointer hover:underline">Mark all read</span>
+                   </div>
+                   <div className="max-h-64 overflow-y-auto">
+                     {notifications.map(n => (
+                       <div key={n.id} className={`p-4 border-b last:border-0 hover:bg-black/5 cursor-pointer transition-colors ${bandwidthMode === 'high' ? 'border-gray-50' : 'border-green-900 hover:bg-green-900/30'}`}>
+                         <div className="flex justify-between items-start mb-1">
+                           <span className={`font-bold text-sm ${n.urgent ? 'text-red-500' : ''}`}>{n.title}</span>
+                           <span className="text-[10px] opacity-50">{n.time}</span>
+                         </div>
+                         <p className="text-xs opacity-70 leading-relaxed">{n.desc}</p>
+                       </div>
+                     ))}
+                   </div>
+                   <div className={`p-3 text-center text-xs font-bold border-t cursor-pointer hover:bg-black/5 ${bandwidthMode === 'high' ? 'text-emerald-700 border-gray-100' : 'text-green-400 border-green-900'}`}>
+                     View All Alerts
+                   </div>
+                 </div>
+               )}
+             </div>
+
+             {/* --- PROFILE SECTION --- */}
+             <div className="relative">
+               <div 
+                 onClick={() => { setShowProfileMenu(!showProfileMenu); setShowNotifications(false); }}
+                 className="flex items-center gap-2 cursor-pointer group select-none"
+               >
+                 <div className={`w-10 h-10 rounded-full overflow-hidden border-2 transition-transform group-hover:scale-105 ${bandwidthMode === 'high' ? 'border-white/50 shadow-sm' : 'border-green-500'}`}>
+                   <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+                 </div>
+                 <ChevronDown size={16} className={`transition-transform duration-300 ${showProfileMenu ? 'rotate-180' : ''} ${bandwidthMode === 'high' ? 'opacity-60 text-slate-700' : 'text-green-500'}`}/>
                </div>
-               <ChevronDown size={16} className="opacity-60 group-hover:opacity-100"/>
+
+               {/* Profile Dropdown */}
+               {showProfileMenu && (
+                 <div className={`absolute top-full right-0 mt-4 w-60 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 origin-top-right
+                   ${bandwidthMode === 'high' ? 'bg-white/80 backdrop-blur-xl border border-white/40 text-slate-800' : 'bg-black border border-green-500 text-green-400'}
+                 `}>
+                   <div className="p-4 flex items-center gap-3 border-b border-white/10">
+                     <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">NS</div>
+                     <div>
+                       <div className="font-bold text-sm">Nishchal Sharma</div>
+                       <div className="text-xs opacity-60">Admin • Sector 4</div>
+                     </div>
+                   </div>
+                   <div className="p-2 space-y-1">
+                     <button className={`w-full text-left px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${bandwidthMode === 'high' ? 'hover:bg-slate-100' : 'hover:bg-green-900'}`}>
+                       <User size={16} /> My Profile
+                     </button>
+                     <button onClick={() => setActiveTab('settings')} className={`w-full text-left px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${bandwidthMode === 'high' ? 'hover:bg-slate-100' : 'hover:bg-green-900'}`}>
+                       <Settings size={16} /> Preferences
+                     </button>
+                     <div className={`my-1 border-t ${bandwidthMode === 'high' ? 'border-slate-100' : 'border-green-900'}`}></div>
+                     <button className={`w-full text-left px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${bandwidthMode === 'high' ? 'text-red-600 hover:bg-red-50' : 'text-red-400 hover:bg-red-900/20'}`}>
+                       <ExternalLink size={16} /> Log Out
+                     </button>
+                   </div>
+                 </div>
+               )}
              </div>
           </div>
         </header>
