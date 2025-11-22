@@ -1,6 +1,3 @@
-
-
-
 "use client";
 
 import React, { useState, useEffect, useRef, ReactNode, FC, ChangeEvent, MouseEvent, FormEvent } from 'react';
@@ -13,6 +10,7 @@ import {
   Send,
   Sprout,
   ThermometerSun,
+  Home,
   Activity,
   Menu,
   Cpu,
@@ -54,7 +52,7 @@ interface Translations {
   [lang: string]: {
     title: string;
     subtitle: string;
-    dashboard: string;
+    AgriBot: string;
     soil_analysis: string;
     agri_news: string;
     ai_chatbot: string;
@@ -103,11 +101,8 @@ interface Translations {
   };
 }
 
-// Removing duplicate declarations of SUPPORTED_LANGUAGES and INITIAL_TRANSLATIONS at line ~183
-
-// Keep only top-level declarations once, remove duplicates below or above this section that duplicate these constants
-
-const SUPPORTED_LANGUAGES = [
+// Only declare these once to avoid duplicates and redeclaration errors
+const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'en', name: 'English', native: 'English' },
   { code: 'hi', name: 'Hindi', native: 'हिंदी' },
   { code: 'pa', name: 'Punjabi', native: 'ਪੰਜਾਬੀ' },
@@ -119,19 +114,23 @@ const SUPPORTED_LANGUAGES = [
   { code: 'kn', name: 'Kannada', native: 'ಕನ್ನಡ' },
 ];
 
-const INITIAL_TRANSLATIONS = {
+export interface TranslationsMap {
+  [lang: string]: { [key: string]: string };
+}
+
+const INITIAL_TRANSLATIONS: TranslationsMap = {
   en: {
     title: "Kisan",
     subtitle: "Intelligent Advisory",
-    dashboard: "Dashboard",
+    dashboard: "AgriBot",
     soil_analysis: "Soil Analysis",
     agri_news: "Agri News",
     ai_chatbot: "AI Chatbot",
     settings: "Settings",
-    good_afternoon: "Dashboard", // Changed to match image header
+    good_afternoon: "AgriBot", // Changed to match image header
     weather_desc: "Weekly Field Forecast",
     analyze_card: "Analyze Soil",
-    analyze_desc: "Search ever, asssres in your moroniale rods.", // Keeping generic filler from prompt or original
+    analyze_desc: "Search ever, asssres in your moroniale rods.",
     ask_card: "Ask AI Assistant",
     ask_desc: "Useior suoret agricultures brain-chip.",
     news_card: "Latest Updates",
@@ -173,7 +172,7 @@ const INITIAL_TRANSLATIONS = {
 };
 
 // --- Helper: Gemini API for Translation ---
-const translateContent = async (textObj, targetLang) => {
+const translateContent = async (textObj: object, targetLang: string): Promise<any> => {
   if (targetLang === 'en') return textObj;
   try {
     const prompt = `
@@ -183,20 +182,44 @@ const translateContent = async (textObj, targetLang) => {
       Source JSON:
       ${JSON.stringify(textObj)}
     `;
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      }
-    );
+    const response = await fetch('/api/gemini-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!response.ok) {
+      console.error('Translation API returned error status:', response.status);
+      const errorText = await response.text();
+      console.error('Response body:', errorText);
+      return null;
+    }
+
     const data = await response.json();
+
+    if (data.error) {
+      console.error('Translation API error:', data.error, data.details);
+      return null;
+    }
+
     const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    const jsonMatch =
-      resultText.match(/```json\n([\s\S]*?)\n```/) || resultText.match(/```\n([\s\S]*?)\n```/);
+
+    if (!resultText) {
+      console.error('Translation API response missing expected text data');
+      return null;
+      return null;
+    }
+
+    const jsonMatch = resultText.match(/```json\n([\s\S]*?)\n```/) || resultText.match(/```\n([\s\S]*?)\n```/);
     const cleanJson = jsonMatch ? jsonMatch[1] : resultText;
-    return JSON.parse(cleanJson);
+
+    try {
+      return JSON.parse(cleanJson);
+    } catch (jsonError) {
+      console.error('Failed to parse translation JSON:', jsonError, cleanJson);
+      return null;
+    }
+
   } catch (error) {
     console.error('Translation failed:', error);
     return null;
@@ -239,38 +262,135 @@ const animationStyles = `
   }
 `;
 
+interface TranslationsMap {
+  [lang: string]: { [key: string]: string };
+}
+
+interface Theme {
+  bg: string;
+  bgImage: string;
+  text: string;
+  card: string;
+  sidebar: string;
+  primary: string;
+  accent: string;
+  border: string;
+  input: string;
+  font: string;
+  navHover: string;
+  navActive: string;
+  button: string;
+}
+
+interface WeatherDay {
+  date: Date;
+  dayName: string;
+  max: number;
+  min: number;
+  precip: number;
+  wind: number;
+  code: number;
+}
+
+
+interface WeatherData {
+  current: WeatherDay;
+  forecast: WeatherDay[];
+  city: string;
+  region: string;
+}
+
+interface NewsItem {
+  id: number;
+  title: string;
+  summary: string;
+  date: string;
+  link?: string;
+  source?: string;
+  urgent?: boolean;
+}
+
+interface Message {
+  id: number;
+  role: 'user' | 'bot';
+  text: string;
+}
+
 // --- Components ---
 
 export default function App() {
   // Global State
-  const [lang, setLang] = useState('en');
-  const [translations, setTranslations] = useState(INITIAL_TRANSLATIONS);
-  const [isTranslating, setIsTranslating] = useState(false);
-  
-  const [location, setLocation] = useState('Gurugram, Haryana, India');
-  const [bandwidthMode, setBandwidthMode] = useState('high'); 
-  const [networkSpeed, setNetworkSpeed] = useState(10); 
-  const [manualThrottle, setManualThrottle] = useState(false);
-  
+  const [lang, setLang] = useState<string>('en');
+  const [translations, setTranslations] = useState<TranslationsMap>(INITIAL_TRANSLATIONS);
+  const [isTranslating, setIsTranslating] = useState<boolean>(false);
+
+  const [location, setLocation] = useState<string>('Gurugram, Haryana, India');
+
+  // New state for connection status color: 'green', 'yellow', 'red'
+  const [connectionStatus, setConnectionStatus] = useState<'green' | 'yellow' | 'red'>('green');
+  const [bandwidthMode, setBandwidthMode] = useState<'high' | 'low'>('high');
+  const [networkSpeed, setNetworkSpeed] = useState<number>(10);
+  const [manualThrottle, setManualThrottle] = useState<boolean>(false);
+
+  // ConnectionStatus component moved inside App to fix scope issue
+  function ConnectionStatus({ status }: { status: 'green' | 'yellow' | 'red' }) {
+    const colors = {
+      green: 'text-green-500',
+      yellow: 'text-yellow-500',
+      red: 'text-red-500',
+    };
+
+    // Lucide-react icons WifiHigh (green) and WifiLow (yellow/red) could be used
+    // Since color to represent status, switch color class based on status
+    const colorClass = colors[status] || 'text-gray-500';
+
+    return (
+      <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-xs font-semibold cursor-default select-none">
+        <svg 
+          xmlns="http://www.w3.org/2000/svg" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2" 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          className={`w-6 h-6 ${colorClass}`}
+        >
+          {/* WiFi arcs */}
+          <path d="M1 12.55a16 16 0 0 1 22 0" />
+          <path d="M5 16.55a10 10 0 0 1 14 0" />
+          <path d="M9 20.55a4 4 0 0 1 6 0" />
+          <line x1="12" y1="24" x2="12" y2="24" />
+        </svg>
+      </div>
+    );
+  }
+
   // Navigation State
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
-  const t = translations[lang] || translations['en'];
+  const t: { [key: string]: string } = translations[lang] || translations['en'];
 
-  const handleLanguageChange = async (newLangCode) => {
+  const handleLanguageChange = async (newLangCode: string): Promise<void> => {
     if (newLangCode === lang) return;
     if (translations[newLangCode]) {
       setLang(newLangCode);
       return;
     }
     setIsTranslating(true);
-    const newTranslations = await translateContent(translations['en'], SUPPORTED_LANGUAGES.find(l => l.code === newLangCode).name);
+    const langName = SUPPORTED_LANGUAGES.find(l => l.code === newLangCode)?.name;
+    if (!langName) {
+      alert('Unsupported language selected.');
+      setIsTranslating(false);
+      return;
+    }
+    const newTranslations = await translateContent(translations['en'], langName);
     if (newTranslations) {
       setTranslations(prev => ({ ...prev, [newLangCode]: newTranslations }));
       setLang(newLangCode);
     } else {
-      alert("Translation failed. Please check connection.");
+      alert('Translation failed. Please check connection.');
     }
     setIsTranslating(false);
   };
@@ -287,6 +407,20 @@ export default function App() {
     return () => clearInterval(interval);
   }, [manualThrottle]);
 
+  // Sync connection status color based on network speed with thresholds
+  useEffect(() => {
+    if (networkSpeed < 1.5) {
+      setConnectionStatus('red');
+      setBandwidthMode('low');
+    } else if (networkSpeed < 3.5) {
+      setConnectionStatus('yellow');
+      setBandwidthMode('high');
+    } else {
+      setConnectionStatus('green');
+      setBandwidthMode('high');
+    }
+  }, [networkSpeed]);
+
   useEffect(() => {
     if (networkSpeed < 2.0) {
       if (bandwidthMode !== 'low') setBandwidthMode('low');
@@ -295,43 +429,43 @@ export default function App() {
     }
   }, [networkSpeed]);
 
-  const theme = {
+  const theme: Theme = {
     high: {
-      bg: "bg-cover bg-center bg-no-repeat bg-fixed",
+      bg: 'bg-cover bg-center bg-no-repeat bg-fixed',
       bgImage: "url('https://i.postimg.cc/260qfNq8/48d67b4c-e842-4935-901b-b68db4568a67.png')",
-      text: "text-slate-800",
-      card: "glass-card rounded-3xl",
-      sidebar: "glass-sidebar",
-      primary: "bg-emerald-600/90 text-white hover:bg-emerald-700",
-      accent: "text-emerald-800",
-      border: "border-white/30",
-      input: "bg-white/50 border-white/40 focus:ring-emerald-500 backdrop-blur-sm",
-      font: "font-sans",
-      navHover: "hover:bg-white/20 hover:scale-105",
-      navActive: "bg-white/30 shadow-sm scale-105 text-emerald-900",
-      button: "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg hover:shadow-xl"
+      text: 'text-slate-800',
+      card: 'glass-card rounded-3xl',
+      sidebar: 'glass-sidebar',
+      primary: 'bg-emerald-600/90 text-white hover:bg-emerald-700',
+      accent: 'text-emerald-800',
+      border: 'border-white/30',
+      input: 'bg-white/50 border-white/40 focus:ring-emerald-500 backdrop-blur-sm',
+      font: 'font-sans',
+      navHover: 'hover:bg-white/20 hover:scale-105',
+      navActive: 'bg-white/30 shadow-sm scale-105 text-emerald-900',
+      button: 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg hover:shadow-xl',
     },
     low: {
-      bg: "bg-black",
-      bgImage: "none",
-      text: "text-green-500",
-      card: "bg-black border border-green-800 rounded-none",
-      sidebar: "bg-black border-r border-green-900",
-      primary: "bg-green-900 text-green-100 border border-green-500 hover:bg-green-800",
-      accent: "text-green-400",
-      border: "border-green-800",
-      input: "bg-black border-green-700 text-green-400 focus:border-green-400 font-mono",
-      font: "font-mono",
-      navHover: "hover:bg-green-900",
-      navActive: "bg-green-900 text-green-100 border border-green-500",
-      button: "bg-green-900 border border-green-500 text-green-400 hover:bg-green-800"
-    }
+      bg: 'bg-black',
+      bgImage: 'none',
+      text: 'text-green-500',
+      card: 'bg-black border border-green-800 rounded-none',
+      sidebar: 'bg-black border-r border-green-900',
+      primary: 'bg-green-900 text-green-100 border border-green-500 hover:bg-green-800',
+      accent: 'text-green-400',
+      border: 'border-green-800',
+      input: 'bg-black border-green-700 text-green-400 focus:border-green-400 font-mono',
+      font: 'font-mono',
+      navHover: 'hover:bg-green-900',
+      navActive: 'bg-green-900 text-green-100 border border-green-500',
+      button: 'bg-green-900 border border-green-500 text-green-400 hover:bg-green-800',
+    },
   }[bandwidthMode];
 
   return (
     <div 
-      className={`min-h-screen flex flex-col transition-colors duration-500 ${theme.font} ${theme.text} ${bandwidthMode === 'low' ? theme.bg : ''}`}
-      style={bandwidthMode === 'high' ? { backgroundImage: theme.bgImage, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+      className={`min-h-screen flex flex-col transition-colors duration-500 ${theme?.font} ${theme?.text} ${bandwidthMode === 'low' ? theme?.bg : ''}`}
+      style={bandwidthMode === 'high' ? { backgroundImage: theme?.bgImage, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
     >
       <style>{animationStyles}</style>
       
@@ -348,7 +482,7 @@ export default function App() {
 
         {/* Nav Items */}
         <div className="flex flex-col gap-6 w-full px-2">
-          <NavIcon icon={<Activity />} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} theme={theme} />
+          <NavIcon icon={<Home />} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} theme={theme} />
           <NavIcon icon={<Sprout />} label={t.soil_analysis} active={activeTab === 'soil'} onClick={() => setActiveTab('soil')} theme={theme} />
           <NavIcon icon={<Newspaper />} label={t.agri_news} active={activeTab === 'news'} onClick={() => setActiveTab('news')} theme={theme} />
           <NavIcon icon={<Cpu />} label={t.ai_chatbot} active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} theme={theme} />
@@ -378,16 +512,13 @@ export default function App() {
             {t.good_afternoon}
           </h1>
           
-          <div className="flex items-center gap-6">
-             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-xs font-semibold">
-               <CalendarDays size={14}/>
-               <span>Oct 24, 2025</span>
-             </div>
-             
-             <div className="relative">
-               <Bell size={20} className="opacity-80"/>
-               <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-             </div>
+        <div className="flex items-center gap-6">
+           <ConnectionStatus status={connectionStatus} />
+           
+           <div className="relative">
+             <Bell size={20} className="opacity-80"/>
+             <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+           </div>
 
              <div className="flex items-center gap-2 cursor-pointer group">
                <div className="w-8 h-8 rounded-full bg-emerald-200 overflow-hidden border-2 border-white/50">
@@ -413,7 +544,7 @@ export default function App() {
           {activeTab === 'dashboard' && <Dashboard theme={theme} setTab={setActiveTab} t={t} location={location} bandwidthMode={bandwidthMode} />}
           {activeTab === 'soil' && <SoilAnalyzer theme={theme} t={t} bandwidthMode={bandwidthMode} />}
           {activeTab === 'news' && <NewsPortal theme={theme} t={t} lang={lang} location={location} bandwidthMode={bandwidthMode} />}
-          {activeTab === 'chat' && <ChatInterface theme={theme} mode={bandwidthMode} t={t} lang={lang} />}
+          {activeTab === 'chat' && <ChatInterface theme={theme} mode={bandwidthMode} t={t} lang={lang} onClose={() => setActiveTab('dashboard')} />}
           {activeTab === 'settings' && (
             <SettingsPanel 
               theme={theme} 
@@ -437,7 +568,7 @@ export default function App() {
 
 // --- Sub Components ---
 
-function NavIcon({ icon, label, active, onClick, theme }) {
+function NavIcon({ icon, label, active, onClick, theme }: { icon: React.ReactElement; label: string; active: boolean; onClick: () => void; theme: Theme }) {
   // Only showing icon for the slim sidebar look
   return (
     <div className="group relative flex items-center justify-center w-full">
@@ -461,7 +592,7 @@ function NavIcon({ icon, label, active, onClick, theme }) {
   );
 }
 
-function Dashboard({ theme, setTab, t, location, bandwidthMode }) {
+function Dashboard({ theme, setTab, t, location, bandwidthMode }: { theme: Theme; setTab: (tab: string) => void; t: { [key: string]: string }; location: string; bandwidthMode: 'high' | 'low' }) {
   return (
     <div className="max-w-6xl mx-auto space-y-8 mt-4">
       
@@ -469,28 +600,53 @@ function Dashboard({ theme, setTab, t, location, bandwidthMode }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <GlassCard 
           theme={theme} 
-          icon={<Leaf className="text-emerald-500" size={32} />} 
+          icon={
+            <div className="relative flex items-center justify-center bg-transparent rounded-full mx-auto" style={{
+              background: 'radial-gradient(circle, #ddefbd 20%, #ddefbd 40%, transparent 90%)',
+              width: '125px',
+              height: '125px',
+            }}>
+              <img src="https://i.postimg.cc/J7HS7PyN/Untitled-design-5-removebg-preview.png" alt="Analyze Soil Icon" className="w-28 h-28 object-contain" />
+            </div>
+          } 
           title={t.analyze_card} 
           desc={t.analyze_desc} 
           onClick={() => setTab('soil')} 
           glowColor="group-hover:shadow-emerald-500/20"
+          noIconBackground={true}
         />
         <GlassCard 
           theme={theme} 
-          icon={<Cpu className="text-blue-500" size={32} />} 
+          icon={
+            <div className="relative flex items-center justify-center bg-transparent rounded-full mx-auto" style={{
+              width: '125px',
+              height: '125px',
+            }}>
+              <img src="https://i.postimg.cc/L8rF3wgr/Untitled-design-6-removebg-preview.png" alt="Ask AI Assistant Icon" className="w-28 h-28 object-contain" />
+            </div>
+          } 
           title={t.ask_card} 
           desc={t.ask_desc} 
           onClick={() => setTab('chat')} 
           glowColor="group-hover:shadow-blue-500/20"
+          noIconBackground={true}
         />
-        <GlassCard 
-          theme={theme} 
-          icon={<Newspaper className="text-purple-500" size={32} />} 
-          title={t.news_card} 
-          desc={t.news_desc} 
-          onClick={() => setTab('news')} 
-          glowColor="group-hover:shadow-purple-500/20"
-        />
+            <GlassCard 
+              theme={theme} 
+              icon={
+              <div className="relative flex items-center justify-center bg-transparent rounded-full mx-auto -mt-2" style={{
+                width: '125px',
+                height: '125px',
+              }}>
+                <Newspaper className="text-slate-800" size={80} />
+              </div>
+              } 
+              title={t.news_card} 
+              desc={t.news_desc} 
+              onClick={() => setTab('news')} 
+              glowColor="group-hover:shadow-slate-400/20"
+              noIconBackground={true}
+            />
       </div>
 
       {/* Weather Section - Unified Glass Container */}
@@ -499,15 +655,15 @@ function Dashboard({ theme, setTab, t, location, bandwidthMode }) {
   );
 }
 
-function WeatherWidget({ theme, location, bandwidthMode, t }) {
-  const [weather, setWeather] = useState(null);
-  const [loading, setLoading] = useState(true);
+function WeatherWidget({ theme, location, bandwidthMode, t }: { theme: Theme; location: string; bandwidthMode: 'high' | 'low'; t: { [key: string]: string } }) {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const fetchWeather = async () => {
       setLoading(true);
       try {
-        let latitude, longitude, name, admin1;
+        let latitude: number, longitude: number, name: string, admin1: string;
         let geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
         let geoRes = await fetch(geoUrl);
         let geoData = await geoRes.json();
@@ -528,7 +684,7 @@ function WeatherWidget({ theme, location, bandwidthMode, t }) {
           const weatherData = await weatherRes.json();
 
           if (weatherData.daily) {
-             const daily = weatherData.daily.time.map((t, i) => ({
+             const daily: WeatherDay[] = weatherData.daily.time.map((t: string, i: number) => ({
                 date: new Date(t),
                 dayName: new Date(t).toLocaleDateString('en-US', { weekday: 'short' }),
                 max: Math.round(weatherData.daily.temperature_2m_max[i]),
@@ -557,7 +713,7 @@ function WeatherWidget({ theme, location, bandwidthMode, t }) {
     fetchWeather();
   }, [location]);
 
-  const getWeatherDetails = (code, size = 24) => {
+  const getWeatherDetails = (code: number, size = 24) => {
     if (code <= 1) return { icon: <ThermometerSun size={size} className="text-amber-400" />, text: "Sunny" };
     if (code <= 3) return { icon: <CloudSun size={size} className="text-yellow-400" />, text: "Cloudy" };
     if (code <= 48) return { icon: <Wind size={size} className="text-slate-400" />, text: "Foggy" };
@@ -591,7 +747,7 @@ function WeatherWidget({ theme, location, bandwidthMode, t }) {
           <p className="opacity-70">TODAY: {weather.current.max}/{weather.current.min}C | {getWeatherDetails(weather.current.code).text.toUpperCase()}</p>
         </div>
         <div className="space-y-1">
-           {weather.forecast.map((day, idx) => (
+           {weather.forecast.map((day: WeatherDay, idx: number) => (
              <div key={idx} className="flex justify-between">
                <span>{day.dayName.toUpperCase()}</span>
                <span>{day.max}/{day.min}C</span>
@@ -619,27 +775,27 @@ function WeatherWidget({ theme, location, bandwidthMode, t }) {
          </div>
          
          <div className="mt-4">
-           <div className="text-5xl font-bold text-slate-800 tracking-tighter">{weather.current.max}°C</div>
-           <p className="text-sm font-medium opacity-60 mt-1">{todayDetails.text}</p>
+          <div className="text-5xl font-bold text-slate-800 tracking-tighter">{weather.current.max}°C</div>
+          <p className="text-sm font-medium opacity-60 mt-1">{todayDetails.text}</p>
+
          </div>
 
          <div className="flex gap-4 mt-4 text-xs font-semibold opacity-70">
             <span className="bg-white/30 px-2 py-1 rounded-md">Wind: {weather.current.wind}km/h</span>
-            <span className="bg-white/30 px-2 py-1 rounded-md">Rain: {weather.current.precip}%</span>
-         </div>
+            <span className="bg-white/30 px-2 py-1 rounded-md">Rain: {weather.current.precip}%</span></div>
       </div>
 
       {/* Right: Forecast Row */}
       <div className="lg:w-2/3 p-6 flex flex-col justify-center">
         <div className="grid grid-cols-4 gap-4 h-full">
-           {weather.forecast.map((day, idx) => {
-             const details = getWeatherDetails(day.code, 28);
+           {weather.forecast.map((day: WeatherDay, idx: number) => {
+             const details = getWeatherDetails(day.code, 40);
              return (
                <div key={idx} className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/20 hover:bg-white/40 transition-colors border border-white/20 gap-2">
-                 <span className="text-sm font-bold opacity-70">{day.dayName}</span>
-                 <div className="my-1">{details.icon}</div>
-                 <span className="text-lg font-bold text-slate-800">{day.max}°C</span>
-                 <span className="text-xs opacity-50">{day.min}°</span>
+                 <span className="text-base font-bold opacity-70">{day.dayName}</span>
+                 <div className="my-2">{details.icon}</div>
+                 <span className="text-xl font-bold text-slate-800">{day.max}°C</span>
+                 <span className="text-sm opacity-60">{day.min}°</span>
                </div>
              );
            })}
@@ -649,12 +805,12 @@ function WeatherWidget({ theme, location, bandwidthMode, t }) {
   );
 }
 
-function GlassCard({ theme, icon, title, desc, onClick, glowColor }) {
+function GlassCard({ theme, icon, title, desc, onClick, glowColor, noIconBackground }: { theme: any, icon: any, title: any, desc: any, onClick: any, glowColor: any, noIconBackground: any }) {
   if (theme.font === 'font-mono') {
      // Fallback for LOW bandwidth mode
      return (
-      <button onClick={onClick} className={`p-6 text-left transition-transform hover:-translate-y-1 ${theme.card} group w-full`}>
-        <div className={`mb-4 text-green-400`}>{icon}</div>
+      <button onClick={onClick} className={`p-6 text-center transition-transform hover:-translate-y-1 ${theme.card} group w-full`}>
+        <div className={`mb-4 text-green-400 flex justify-center`}>{icon}</div>
         <h3 className="text-lg font-bold mb-1 group-hover:underline">{title}</h3>
         <p className="text-sm opacity-70">{desc}</p>
       </button>
@@ -664,13 +820,20 @@ function GlassCard({ theme, icon, title, desc, onClick, glowColor }) {
   // High Bandwidth Glass Card
   return (
     <button onClick={onClick} className={`
-      ${theme.card} p-6 text-left relative overflow-hidden group hover:-translate-y-1 transition-all duration-300
+      ${theme.card} p-6 text-center relative overflow-hidden group hover:-translate-y-1 transition-all duration-300
       ${glowColor} hover:shadow-lg
     `}>
       <div className="relative z-10 flex flex-col h-full">
-        <div className="bg-white/50 w-12 h-12 rounded-xl flex items-center justify-center mb-4 shadow-sm backdrop-blur-sm">
-          {icon}
-        </div>
+        {!noIconBackground && (
+          <div className="bg-white/50 w-12 h-12 rounded-xl flex items-center justify-center mb-4 shadow-sm backdrop-blur-sm mx-auto">
+            {icon}
+          </div>
+        )}
+        {noIconBackground && (
+          <div className="mb-4 flex justify-center">
+            {icon}
+          </div>
+        )}
         <h3 className="text-xl font-bold text-slate-800 mb-2 leading-tight">{title}</h3>
         <p className="text-sm text-slate-600 leading-relaxed line-clamp-2">{desc}</p>
       </div>
@@ -941,7 +1104,7 @@ function NewsPortal({ theme, t, lang, location, bandwidthMode }) {
   );
 }
 
-function ChatInterface({ theme, mode, t, lang }) {
+function ChatInterface({ theme, mode, t, lang, onClose }: { theme: any; mode: 'high'|'low'; t: {[key: string]: string}; lang: string; onClose: () => void }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -964,17 +1127,25 @@ function ChatInterface({ theme, mode, t, lang }) {
     try {
       const targetLangName = SUPPORTED_LANGUAGES.find(l => l.code === lang)?.name || 'English';
       const prompt = `You are an agricultural advisor. User Question: "${userMsg.text}" Constraints: 1. Reply in ${targetLangName} language. 2. If mode is 'low', keep reply extremely concise, keyword based, uppercase. 3. If mode is 'high', be conversational and helpful. 4. Mode is currently: '${mode}'. Reply with just the text.`;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-      const data = await response.json();
-      const botResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Server Busy. Try again.";
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: botResponse }]);
-    } catch (error) {
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: "Error connecting to AI." }]);
-    } finally { setIsTyping(false); }
+    const response = await fetch('/api/gemini-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await response.json();
+    const botResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Server Busy. Try again.";
+    setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: botResponse }]);
+  } catch (error) {
+    setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: "Error connecting to AI." }]);
+  } finally { setIsTyping(false); }
   };
 
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-140px)] flex flex-col mt-4">
+    <div className="max-w-4xl mx-auto h-[calc(100vh-140px)] flex flex-col mt-4 relative">
+      {/* Cross button top right */}
+      <button onClick={onClose} aria-label="Close chat" title="Close" className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-gray-600 hover:text-gray-900 rounded-full bg-white/50 hover:bg-white shadow-md z-20">
+        &#10005;
+      </button>
       <div className={`flex-1 overflow-y-auto p-6 space-y-4 rounded-t-3xl border-t border-x ${theme.font === 'font-sans' ? 'glass-panel border-white/20' : 'bg-black border-green-900'}`}>
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -988,6 +1159,7 @@ function ChatInterface({ theme, mode, t, lang }) {
         <div ref={chatEndRef} />
       </div>
       <form onSubmit={handleSend} className={`p-4 rounded-b-3xl border-b border-x ${theme.font === 'font-sans' ? 'glass-panel border-white/20' : 'bg-black border-green-900'} flex gap-2`}>
+        
         <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder={mode === 'high' ? t.chat_placeholder : t.chat_placeholder_low} className={`flex-1 p-4 rounded-xl outline-none border transition-colors ${theme.input} ${theme.font === 'font-mono' ? 'border-green-800' : ''}`} />
         <button type="submit" disabled={!input.trim()} className={`p-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${theme.button}`}><Send size={24} /></button>
       </form>
