@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // ---------------------------------------------------------
 // PASTE YOUR API KEY HERE ONE LAST TIME
 // ---------------------------------------------------------
-const apiKey = 'AIzaSyAtVimUosOHmBfhINtzJcQHuOQqqDyk7FU'; 
+const apiKey = '**'; 
 
 export async function POST(request: NextRequest) {
   try {
