@@ -1,6 +1,59 @@
 "use client";
 
 import React, { useState, useEffect, useRef, ReactNode, FC, ChangeEvent, MouseEvent, FormEvent } from 'react';
+
+/**
+ * Utility function to parse text with bullet points (*) and bold (**)
+ * @param text string input possibly containing bullet points and **bold** segments
+ * @returns ReactNode JSX elements with list and <strong> elements
+ */
+function formatTextWithBulletsAndBold(text: string | undefined | null): React.ReactNode {
+  if (!text) return null;
+
+  // Split by new lines to check for bullet points
+  const lines = text.split('\n').filter(line => line.trim() !== '');
+  const isList = lines.every(line => line.trim().startsWith('*'));
+
+  if (isList) {
+    return (
+      <ul className="list-disc pl-5 space-y-1">
+        {lines.map((line, idx) => {
+          // Remove initial '*' and any leading space
+          const content = line.replace(/^\*\s?/, '');
+
+          // Replace **bold** with <strong> elements
+          const parts = content.split(/(\*\*.+?\*\*)/g).filter(Boolean);
+
+          return (
+            <li key={idx} className="leading-relaxed">
+              {parts.map((part, i) => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                  const boldText = part.slice(2, -2);
+                  return <strong key={i}>{boldText}</strong>;
+                }
+                return part;
+              })}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  } else {
+    // For non-list text, just parse bold markup **...**
+    const parts = text.split(/(\*\*.+?\*\*)/g).filter(Boolean);
+    return (
+      <>
+        {parts.map((part, i) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            const boldText = part.slice(2, -2);
+            return <strong key={i}>{boldText}</strong>;
+          }
+          return part;
+        })}
+      </>
+    );
+  }
+}
 import {
   Leaf,
   WifiHigh,
@@ -318,6 +371,8 @@ interface Message {
 export default function App() {
   // Global State
   const [lang, setLang] = useState<string>('en');
+
+  // Remove the previously defined customScrollbarStyles and replace with global CSS for scrollbars
   const [translations, setTranslations] = useState<TranslationsMap>(INITIAL_TRANSLATIONS);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
 
@@ -601,7 +656,34 @@ export default function App() {
         </header>
 
         {/* Main Scrollable Area */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8 pt-0 z-10 scrollbar-hide">
+    {/* Removed scrollbar-hide and added custom scrollbar styles */}
+        {/* Remove custom-scrollbar class and related styles from main, add global scrollbar CSS */}
+        <style jsx global>{`
+          /* width */
+          ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+          }
+          /* Track */
+          ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+          }
+          /* Handle */
+          ::-webkit-scrollbar-thumb {
+            background: rgba(16, 185, 129, 0.7);
+            border-radius: 8px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+          }
+          /* Handle on hover */
+          ::-webkit-scrollbar-thumb:hover {
+            background: rgba(16, 185, 129, 0.9);
+          }
+          /* Firefox */
+          scrollbar-color: rgba(16, 185, 129, 0.7) rgba(255, 255, 255, 0.1);
+          scrollbar-width: thin;
+        `}</style>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-8 pt-0 z-10">
           
           {/* Global Loading Overlay for Translation */}
           {isTranslating && (
@@ -1024,7 +1106,7 @@ function SoilAnalyzer({ theme, t, bandwidthMode }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
 
-  const handleUpload = () => {
+const handleUpload = () => {
     setAnalyzing(true);
     setTimeout(() => {
       setAnalyzing(false);
@@ -1035,7 +1117,7 @@ function SoilAnalyzer({ theme, t, bandwidthMode }) {
         meaning: "Your soil is sour (Acidic). Nutrients like phosphorus are locked up.",
         action: "Apply agricultural lime (chuna) to neutralize acidity.",
         crops: ["Potatoes", "Blueberries", "Oats"]
-      });
+      } as any);
     }, 3000); 
   };
 
@@ -1069,9 +1151,9 @@ function SoilAnalyzer({ theme, t, bandwidthMode }) {
           </div>
           <div className={`p-6 rounded-xl ${theme.font === 'font-sans' ? 'bg-white/40 border border-white/30' : 'border border-green-600'}`}>
             <h4 className="font-bold mb-2 flex items-center gap-2"><Leaf size={16}/> {t.what_means}</h4>
-            <p className="mb-4">{result.meaning}</p>
-            <h4 className="font-bold mb-2 flex items-center gap-2"><Activity size={16}/> {t.action}</h4>
-            <p className="mb-4">{result.action}</p>
+          <p className="mb-4">{formatTextWithBulletsAndBold(result.meaning)}</p>
+          <h4 className="font-bold mb-2 flex items-center gap-2"><Activity size={16}/> {t.action}</h4>
+          <p className="mb-4">{formatTextWithBulletsAndBold(result.action)}</p>
             <h4 className="font-bold mb-2">{t.crops}</h4>
             <div className="flex flex-wrap gap-2">
               {result.crops.map(crop => (<span key={crop} className={`text-xs px-2 py-1 rounded-md font-medium ${theme.font === 'font-sans' ? 'bg-white/60 shadow-sm text-slate-800' : 'border border-green-500'}`}>{crop}</span>))}
@@ -1214,24 +1296,50 @@ function ChatInterface({ theme, mode, t, lang, onClose }: { theme: any; mode: 'h
   return (
     <div className="max-w-4xl mx-auto h-[calc(100vh-140px)] flex flex-col mt-4 relative">
       {/* Cross button top right */}
-      <button onClick={onClose} aria-label="Close chat" title="Close" className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-gray-600 hover:text-gray-900 rounded-full bg-white/50 hover:bg-white shadow-md z-20">
-        &#10005;
+      <button onClick={onClose} aria-label="Close chat" title="Close" className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-gray-600 hover:text-gray-900 rounded-full bg-white/50 hover:bg-white shadow-md z-20 leading-none">
+        {/* Replace cross character with centered SVG icon */}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
       </button>
       <div className={`flex-1 overflow-y-auto p-6 space-y-4 rounded-t-3xl border-t border-x ${theme.font === 'font-sans' ? 'glass-panel border-white/20' : 'bg-black border-green-900'}`}>
-        {messages.map((msg) => (
+        {messages.map((msg: any) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[80%] p-4 rounded-2xl whitespace-pre-wrap shadow-sm ${msg.role === 'user' ? (theme.font === 'font-sans' ? 'bg-emerald-600 text-white rounded-br-none' : 'bg-green-900 text-green-100 border border-green-500') : (theme.font === 'font-sans' ? 'bg-white/80 text-slate-800 rounded-bl-none' : 'bg-black border border-green-800 text-green-400')}`}>
               {msg.role === 'bot' && theme.font !== 'font-sans' && <span className="block text-xs font-bold mb-1 opacity-50">[AI-SLM-CORE]</span>}
-              {msg.text}
+              { /* Parse and render message text with bullet points and bold formatting */ }
+              {formatTextWithBulletsAndBold(msg.text)}
             </div>
           </div>
         ))}
-        {isTyping && <div className="flex justify-start"><div className={`p-3 text-xs ${theme.font === 'font-sans' ? 'text-slate-500' : 'text-green-600 animate-pulse'}`}>{mode === 'high' ? 'Agent is typing...' : '>> PROCESSING...'}</div></div>}
-        <div ref={chatEndRef} />
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className={`p-3 text-sm font-semibold ${theme.font === 'font-sans' ? 'text-slate-800 animate-pulse' : 'text-green-900 animate-pulse'}`}>
+              {mode === 'high' ? 'Agent is typing...' : '>> PROCESSING...'}
+            </div>
+          </div>
+        )}
+        <div
+          ref={chatEndRef}
+          className="relative overflow-y-auto max-h-full"
+          onScroll={(e) => {
+            const target = e.target as HTMLElement;
+            const scrollTop = target.scrollTop;
+            const children = target.children;
+            for (let i = 0; i < children.length; i++) {
+              const child = children[i] as HTMLElement;
+              if (scrollTop > 20) {
+                child.style.opacity = (1 - scrollTop / 100).toString();
+              } else {
+                child.style.opacity = '1';
+              }
+            }
+          }}
+        />
       </div>
       <form onSubmit={handleSend} className={`p-4 rounded-b-3xl border-b border-x ${theme.font === 'font-sans' ? 'glass-panel border-white/20' : 'bg-black border-green-900'} flex gap-2`}>
         
-        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder={mode === 'high' ? t.chat_placeholder : t.chat_placeholder_low} className={`flex-1 p-4 rounded-xl outline-none border transition-colors ${theme.input} ${theme.font === 'font-mono' ? 'border-green-800' : ''}`} />
+        <input type="text" value={input} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)} placeholder={mode === 'high' ? t.chat_placeholder : t.chat_placeholder_low} className={`flex-1 p-4 rounded-xl outline-none border transition-colors ${theme.input} ${theme.font === 'font-mono' ? 'border-green-800' : ''}`} />
         <button type="submit" disabled={!input.trim()} className={`p-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${theme.button}`}><Send size={24} /></button>
       </form>
     </div>
