@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { NextResponse } from 'next/server';
+// import { NextResponse } from 'next/server'; // Not needed in client component
 import {
   Leaf,
   WifiHigh,
-  Upload, // Used in icons, but logic moved
+  Upload,
   FileText,
   Send,
   Sprout,
@@ -41,7 +41,6 @@ import SoilAnalyzer from './SoilAnalyzer';
 
 /**
  * Utility function to parse text with bullet points (*) and bold (**)
- * Used by ChatInterface and others
  */
 function formatTextWithBulletsAndBold(text: string | undefined | null): React.ReactNode {
   if (!text) return null;
@@ -87,7 +86,7 @@ function formatTextWithBulletsAndBold(text: string | undefined | null): React.Re
 }
 
 // --- API Configuration ---
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+// const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
 
 // --- Initial Static Data ---
 
@@ -643,7 +642,9 @@ export default function App() {
 
 // --- Sub Components ---
 
-function NavIcon({ icon, label, active, onClick, theme }: { icon: React.ReactElement; label: string; active: boolean; onClick: () => void; theme: Theme }) {
+import { LucideProps } from 'lucide-react';
+
+function NavIcon({ icon, label, active, onClick, theme }: { icon: React.ReactElement<LucideProps>; label: string; active: boolean; onClick: () => void; theme: Theme }) {
   // Only showing icon for the slim sidebar look
   return (
     <div className="group relative flex items-center justify-center w-full">
@@ -667,7 +668,15 @@ function NavIcon({ icon, label, active, onClick, theme }: { icon: React.ReactEle
   );
 }
 
-function Dashboard({ theme, setTab, t, location, bandwidthMode }: { theme: Theme; setTab: (tab: string) => void; t: { [key: string]: string }; location: string; bandwidthMode: 'high' | 'low' }) {
+interface DashboardProps {
+  theme: Theme;
+  setTab: (tab: string) => void;
+  t: { [key: string]: string };
+  location: string;
+  bandwidthMode: 'high' | 'low';
+}
+
+function Dashboard({ theme, setTab, t, location, bandwidthMode }: DashboardProps) {
   return (
     <div className="max-w-6xl mx-auto space-y-8 mt-4">
       
@@ -880,7 +889,17 @@ function WeatherWidget({ theme, location, bandwidthMode, t }: { theme: Theme; lo
   );
 }
 
-function GlassCard({ theme, icon, title, desc, onClick, glowColor, noIconBackground }: { theme: any, icon: any, title: any, desc: any, onClick: any, glowColor: any, noIconBackground: any }) {
+interface GlassCardProps {
+  theme: Theme;
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  onClick: () => void;
+  glowColor: string;
+  noIconBackground?: boolean;
+}
+
+function GlassCard({ theme, icon, title, desc, onClick, glowColor, noIconBackground }: GlassCardProps) {
   if (theme.font === 'font-mono') {
      // Fallback for LOW bandwidth mode
      return (
@@ -919,7 +938,23 @@ function GlassCard({ theme, icon, title, desc, onClick, glowColor, noIconBackgro
   );
 }
 
-function SettingsPanel({ theme, t, lang, changeLang, location, setLocation, bandwidthMode, networkSpeed, setNetworkSpeed, setManualThrottle }) {
+interface SettingsPanelProps {
+  theme: Theme;
+  t: { [key: string]: string };
+  lang: string;
+  changeLang: (lang: string) => Promise<void>;
+  location: string;
+  setLocation: (loc: string) => void;
+  bandwidthMode: 'high' | 'low';
+  networkSpeed: number;
+  setNetworkSpeed: (speed: number) => void;
+  setManualThrottle: (throttle: boolean) => void;
+}
+
+function SettingsPanel({ 
+  theme, t, lang, changeLang, location, setLocation, 
+  bandwidthMode, networkSpeed, setNetworkSpeed, setManualThrottle 
+}: SettingsPanelProps) {
   const [detecting, setDetecting] = useState(false);
 
   const detectLocationByIP = async () => {
@@ -961,7 +996,7 @@ function SettingsPanel({ theme, t, lang, changeLang, location, setLocation, band
     }, () => detectLocationByIP(), { timeout: 8000 });
   };
 
-  const handleSpeedChange = (e) => {
+  const handleSpeedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setNetworkSpeed(val);
     setManualThrottle(true); 
@@ -1024,8 +1059,16 @@ function SettingsPanel({ theme, t, lang, changeLang, location, setLocation, band
   );
 }
 
-function NewsPortal({ theme, t, lang, location, bandwidthMode }) {
-  const [newsData, setNewsData] = useState([]);
+interface NewsPortalProps {
+  theme: Theme;
+  t: { [key: string]: string };
+  lang: string;
+  location: string;
+  bandwidthMode: 'high' | 'low';
+}
+
+function NewsPortal({ theme, t, lang, location, bandwidthMode }: NewsPortalProps) {
+  const [newsData, setNewsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState('local');
 
@@ -1033,7 +1076,7 @@ function NewsPortal({ theme, t, lang, location, bandwidthMode }) {
     setLoading(true);
     let queryTerm = scope === 'national' ? 'India agriculture farming' : `${location} agriculture farming`;
     const locQuery = encodeURIComponent(queryTerm);
-    const newsLangMap = { 'hi': 'hi', 'mr': 'mr', 'ta': 'ta', 'te': 'te', 'ml': 'ml', 'kn': 'kn', 'en': 'en-IN' };
+    const newsLangMap: { [key: string]: string } = { 'hi': 'hi', 'mr': 'mr', 'ta': 'ta', 'te': 'te', 'ml': 'ml', 'kn': 'kn', 'en': 'en-IN' };
     const hl = newsLangMap[lang] || 'en-IN';
     const rssUrl = `https://news.google.com/rss/search?q=${locQuery}&hl=${hl}&gl=IN&ceid=IN:${hl}`;
     const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
@@ -1042,7 +1085,7 @@ function NewsPortal({ theme, t, lang, location, bandwidthMode }) {
       const response = await fetch(proxyUrl);
       const data = await response.json();
       if (data.status === 'ok') {
-        const processed = data.items.slice(0, 6).map((item, idx) => ({
+        const processed = data.items.slice(0, 6).map((item: any, idx: number) => ({
           id: idx,
           title: item.title,
           summary: item.description ? item.description.replace(/<[^>]*>/g, '').substring(0, 120) + '...' : 'No summary available.',
@@ -1107,12 +1150,12 @@ function NewsPortal({ theme, t, lang, location, bandwidthMode }) {
 }
 
 function ChatInterface({ theme, mode, t, lang, onClose }: { theme: any; mode: 'high'|'low'; t: {[key: string]: string}; lang: string; onClose: () => void }) {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chatEndRef = useRef(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const initialMsg = mode === 'high' ? "Namaste! I am your intelligent agriculture assistant. Ask me anything!" : "SYSTEM READY. ASK QUERY.";

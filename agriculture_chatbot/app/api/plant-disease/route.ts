@@ -5,6 +5,8 @@ import { spawn } from 'child_process';
 import os from 'os';
 
 export async function POST(req: NextRequest) {
+  let tempFilePath = '';
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
@@ -17,14 +19,16 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(bytes);
     
     const tempDir = os.tmpdir();
-    const tempFilePath = path.join(tempDir, `upload-${Date.now()}-${file.name}`);
+    tempFilePath = path.join(tempDir, `upload-${Date.now()}-${file.name}`);
     
     await writeFile(tempFilePath, buffer);
 
     const scriptDir = path.resolve(process.cwd(), 'plant_disease'); 
     const pythonScriptPath = path.join(scriptDir, 'run_prediction.py');
 
-    return new Promise((resolve) => {
+    // WRAPPER: Await the python script execution here
+    // This fixes the "Promise<unknown>" TypeScript error
+    const pythonResult = await new Promise<{ success: boolean; data?: string; error?: string }>((resolve) => {
       // KEEP YOUR CORRECT PYTHON PATH HERE
       const pythonExecutable = '/home/nischal-sharma/anaconda3/envs/agriculture/bin/python3';
       
@@ -43,41 +47,44 @@ export async function POST(req: NextRequest) {
         errorOutput += data.toString();
       });
 
-      pythonProcess.on('close', async (code) => {
-        try {
-          await unlink(tempFilePath);
-        } catch (e) {
-          console.error('Failed to cleanup temp file:', e);
-        }
-
-        // --- CHANGED SECTION STARTS HERE ---
+      pythonProcess.on('close', (code) => {
         if (code !== 0) {
-          // Since your python script uses print() for errors, 
-          // the error message might be in 'result', not 'errorOutput'.
           const finalErrorMessage = errorOutput || result || 'Unknown error occurred';
-
           console.error('---------------- PYTHON FAILURE ----------------');
           console.error('Exit Code:', code);
-          console.error('Error Output (stderr):', errorOutput);
-          console.error('Standard Output (stdout):', result);
+          console.error('Error Output:', errorOutput);
           console.error('------------------------------------------------');
           
-          resolve(
-            NextResponse.json(
-              { error: 'Prediction failed', details: finalErrorMessage },
-              { status: 500 }
-            )
-          );
-          return;
+          resolve({ success: false, error: finalErrorMessage });
+        } else {
+          resolve({ success: true, data: result.trim() });
         }
-        // --- CHANGED SECTION ENDS HERE ---
-
-        const prediction = result.trim();
-        resolve(NextResponse.json({ prediction }));
       });
     });
 
+    // Cleanup file
+    try {
+      if (tempFilePath) await unlink(tempFilePath);
+    } catch (e) {
+      console.error('Failed to cleanup temp file:', e);
+    }
+
+    // FINAL RETURN: Now we return a clear NextResponse based on the awaited result
+    if (!pythonResult.success) {
+      return NextResponse.json(
+        { error: 'Prediction failed', details: pythonResult.error },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ prediction: pythonResult.data });
+
   } catch (error: any) {
+    // Cleanup file in case of crash
+    try {
+      if (tempFilePath) await unlink(tempFilePath);
+    } catch (cleanupError) { /* ignore */ }
+
     console.error('API Error:', error);
     return NextResponse.json(
       { error: 'Internal Server Error', details: error.message },
