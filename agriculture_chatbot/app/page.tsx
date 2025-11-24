@@ -1,64 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useRef, ReactNode, FC, ChangeEvent, MouseEvent, FormEvent } from 'react';
-
-/**
- * Utility function to parse text with bullet points (*) and bold (**)
- * @param text string input possibly containing bullet points and **bold** segments
- * @returns ReactNode JSX elements with list and <strong> elements
- */
-function formatTextWithBulletsAndBold(text: string | undefined | null): React.ReactNode {
-  if (!text) return null;
-
-  // Split by new lines to check for bullet points
-  const lines = text.split('\n').filter(line => line.trim() !== '');
-  const isList = lines.every(line => line.trim().startsWith('*'));
-
-  if (isList) {
-    return (
-      <ul className="list-disc pl-5 space-y-1">
-        {lines.map((line, idx) => {
-          // Remove initial '*' and any leading space
-          const content = line.replace(/^\*\s?/, '');
-
-          // Replace **bold** with <strong> elements
-          const parts = content.split(/(\*\*.+?\*\*)/g).filter(Boolean);
-
-          return (
-            <li key={idx} className="leading-relaxed">
-              {parts.map((part, i) => {
-                if (part.startsWith('**') && part.endsWith('**')) {
-                  const boldText = part.slice(2, -2);
-                  return <strong key={i}>{boldText}</strong>;
-                }
-                return part;
-              })}
-            </li>
-          );
-        })}
-      </ul>
-    );
-  } else {
-    // For non-list text, just parse bold markup **...**
-    const parts = text.split(/(\*\*.+?\*\*)/g).filter(Boolean);
-    return (
-      <>
-        {parts.map((part, i) => {
-          if (part.startsWith('**') && part.endsWith('**')) {
-            const boldText = part.slice(2, -2);
-            return <strong key={i}>{boldText}</strong>;
-          }
-          return part;
-        })}
-      </>
-    );
-  }
-}
+import React, { useState, useEffect, useRef } from 'react';
+import { NextResponse } from 'next/server';
 import {
   Leaf,
   WifiHigh,
-  WifiLow,
-  Upload,
+  Upload, // Used in icons, but logic moved
   FileText,
   Send,
   Sprout,
@@ -80,15 +27,64 @@ import {
   CloudSun,
   Wind,
   Droplets,
-  CalendarDays,
   Bell,
   User,
-  Search,
   ChevronDown,
+  Mic,
+  Square,
 } from 'lucide-react';
 
-// Import FarmLoader from components folder
+// Import FarmLoader
 import FarmLoader from './components/FarmLoader';
+// Import extracted SoilAnalyzer component
+import SoilAnalyzer from './SoilAnalyzer';
+
+/**
+ * Utility function to parse text with bullet points (*) and bold (**)
+ * Used by ChatInterface and others
+ */
+function formatTextWithBulletsAndBold(text: string | undefined | null): React.ReactNode {
+  if (!text) return null;
+
+  const lines = text.split('\n').filter(line => line.trim() !== '');
+  const isList = lines.every(line => line.trim().startsWith('*'));
+
+  if (isList) {
+    return (
+      <ul className="list-disc pl-5 space-y-1">
+        {lines.map((line, idx) => {
+          const content = line.replace(/^\*\s?/, '');
+          const parts = content.split(/(\*\*.+?\*\*)/g).filter(Boolean);
+
+          return (
+            <li key={idx} className="leading-relaxed">
+              {parts.map((part, i) => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                  const boldText = part.slice(2, -2);
+                  return <strong key={i}>{boldText}</strong>;
+                }
+                return part;
+              })}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  } else {
+    const parts = text.split(/(\*\*.+?\*\*)/g).filter(Boolean);
+    return (
+      <>
+        {parts.map((part, i) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            const boldText = part.slice(2, -2);
+            return <strong key={i}>{boldText}</strong>;
+          }
+          return part;
+        })}
+      </>
+    );
+  }
+}
 
 // --- API Configuration ---
 const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
@@ -101,57 +97,8 @@ interface Language {
   native: string;
 }
 
-interface Translations {
-  [lang: string]: {
-    title: string;
-    subtitle: string;
-    AgriBot: string;
-    soil_analysis: string;
-    agri_news: string;
-    ai_chatbot: string;
-    settings: string;
-    good_afternoon: string;
-    weather_desc: string;
-    analyze_card: string;
-    analyze_desc: string;
-    ask_card: string;
-    ask_desc: string;
-    news_card: string;
-    news_desc: string;
-    soil_decoder: string;
-    upload_prompt: string;
-    upload_sub: string;
-    select_report: string;
-    analyzing: string;
-    analysis_result: string;
-    ph_level: string;
-    nitrogen: string;
-    what_means: string;
-    action: string;
-    crops: string;
-    news_header: string;
-    news_sub: string;
-    urgent: string;
-    source: string;
-    chat_placeholder: string;
-    chat_placeholder_low: string;
-    settings_header: string;
-    location_label: string;
-    lang_label: string;
-    proto_label: string;
-    detect_loc: string;
-    bandwidth_sim: string;
-    network_mode: string;
-    read_more: string;
-    fetch_error: string;
-    translating: string;
-    switch_lang: string;
-    local_news: string;
-    national_news: string;
-    loading_weather: string;
-    loading_news: string;
-    locating: string;
-  };
+interface TranslationsMap {
+  [lang: string]: { [key: string]: string };
 }
 
 // Only declare these once to avoid duplicates and redeclaration errors
@@ -166,10 +113,6 @@ const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'te', name: 'Telugu', native: 'తెలుగు' },
   { code: 'kn', name: 'Kannada', native: 'ಕನ್ನಡ' },
 ];
-
-export interface TranslationsMap {
-  [lang: string]: { [key: string]: string };
-}
 
 const INITIAL_TRANSLATIONS: TranslationsMap = {
   en: {
@@ -243,8 +186,6 @@ const translateContent = async (textObj: object, targetLang: string): Promise<an
 
     if (!response.ok) {
       console.error('Translation API returned error status:', response.status);
-      const errorText = await response.text();
-      console.error('Response body:', errorText);
       return null;
     }
 
@@ -258,12 +199,9 @@ const translateContent = async (textObj: object, targetLang: string): Promise<an
     const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!resultText) {
-      console.error('Translation API response missing expected text data');
       return null;
     }
     
-    // ERROR FIXED HERE: Removed the extra curly brace } that was causing the build failure
-
     const jsonMatch = resultText.match(/```json\n([\s\S]*?)\n```/) || resultText.match(/```\n([\s\S]*?)\n```/);
     const cleanJson = jsonMatch ? jsonMatch[1] : resultText;
 
@@ -341,7 +279,6 @@ interface WeatherDay {
   wind: number;
   code: number;
 }
-// ERROR FIXED HERE: Removed the extra curly brace } that was causing the build failure
 
 interface WeatherData {
   current: WeatherDay;
@@ -350,29 +287,10 @@ interface WeatherData {
   region: string;
 }
 
-interface NewsItem {
-  id: number;
-  title: string;
-  summary: string;
-  date: string;
-  link?: string;
-  source?: string;
-  urgent?: boolean;
-}
-
-interface Message {
-  id: number;
-  role: 'user' | 'bot';
-  text: string;
-}
-
-// --- Components ---
-
 export default function App() {
   // Global State
   const [lang, setLang] = useState<string>('en');
 
-  // Remove the previously defined customScrollbarStyles and replace with global CSS for scrollbars
   const [translations, setTranslations] = useState<TranslationsMap>(INITIAL_TRANSLATIONS);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
 
@@ -655,9 +573,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Main Scrollable Area */}
-    {/* Removed scrollbar-hide and added custom scrollbar styles */}
-        {/* Remove custom-scrollbar class and related styles from main, add global scrollbar CSS */}
+        {/* Global Scrollbar Styles */}
         <style jsx global>{`
           /* width */
           ::-webkit-scrollbar {
@@ -683,6 +599,7 @@ export default function App() {
           scrollbar-color: rgba(16, 185, 129, 0.7) rgba(255, 255, 255, 0.1);
           scrollbar-width: thin;
         `}</style>
+        
         <main className="flex-1 overflow-y-auto p-4 lg:p-8 pt-0 z-10">
           
           {/* Global Loading Overlay for Translation */}
@@ -695,7 +612,12 @@ export default function App() {
           )}
 
           {activeTab === 'dashboard' && <Dashboard theme={theme} setTab={setActiveTab} t={t} location={location} bandwidthMode={bandwidthMode} />}
-          {activeTab === 'soil' && <SoilAnalyzer theme={theme} t={t} bandwidthMode={bandwidthMode} />}
+          
+          {/* Render SoilAnalyzer Component */}
+          {activeTab === 'soil' && (
+            <SoilAnalyzer theme={theme} t={t} bandwidthMode={bandwidthMode} />
+          )}
+
           {activeTab === 'news' && <NewsPortal theme={theme} t={t} lang={lang} location={location} bandwidthMode={bandwidthMode} />}
           {activeTab === 'chat' && <ChatInterface theme={theme} mode={bandwidthMode} t={t} lang={lang} onClose={() => setActiveTab('dashboard')} />}
           {activeTab === 'settings' && (
@@ -1102,79 +1024,6 @@ function SettingsPanel({ theme, t, lang, changeLang, location, setLocation, band
   );
 }
 
-function SoilAnalyzer({ theme, t, bandwidthMode }) {
-  const [analyzing, setAnalyzing] = useState(false);
-  const [result, setResult] = useState(null);
-
-const handleUpload = () => {
-    setAnalyzing(true);
-    setTimeout(() => {
-      setAnalyzing(false);
-      setResult({
-        ph: 5.2,
-        nitrogen: "Low",
-        summary: "Acidic Soil Detected",
-        meaning: "Your soil is sour (Acidic). Nutrients like phosphorus are locked up.",
-        action: "Apply agricultural lime (chuna) to neutralize acidity.",
-        crops: ["Potatoes", "Blueberries", "Oats"]
-      } as any);
-    }, 3000); 
-  };
-
-  return (
-    <div className="max-w-3xl mx-auto space-y-6 mt-6">
-      <h2 className={`text-2xl font-bold flex items-center gap-3 ${theme.font === 'font-mono' ? 'text-green-500' : 'text-slate-800'}`}><Sprout /> {t.soil_decoder}</h2>
-      {!result ? (
-        <div className={`p-12 border-2 border-dashed rounded-3xl text-center space-y-4 ${theme.font === 'font-sans' ? 'border-white/40 bg-white/20 backdrop-blur-sm' : 'border-green-700 bg-black'}`}>
-          {analyzing ? (
-             <FarmLoader text={t.analyzing} mode={bandwidthMode} />
-          ) : (
-            <>
-              <div className="mx-auto w-20 h-20 flex items-center justify-center rounded-full bg-emerald-500/20 text-emerald-800"><Upload size={32} /></div>
-              <div>
-                <h3 className="text-xl font-bold text-slate-800">{t.upload_prompt}</h3>
-                <p className="opacity-60 text-sm mt-1 text-slate-700">{t.upload_sub}</p>
-              </div>
-              <button onClick={handleUpload} className={`px-8 py-3 rounded-xl font-bold shadow-lg transition-all ${theme.primary}`}>{t.select_report}</button>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className={`p-8 ${theme.card} space-y-6 animate-in fade-in slide-in-from-bottom-4`}>
-          <div className="flex justify-between items-start">
-            <div><h3 className="text-xl font-bold mb-1">{t.analysis_result}</h3></div>
-            <button onClick={() => setResult(null)} className="text-sm underline opacity-70 hover:opacity-100">Reset</button>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <MetricBox label={t.ph_level} value={result.ph} status="Acidic (Bad)" theme={theme} />
-            <MetricBox label={t.nitrogen} value={result.nitrogen} status="Needs Boost" theme={theme} />
-          </div>
-          <div className={`p-6 rounded-xl ${theme.font === 'font-sans' ? 'bg-white/40 border border-white/30' : 'border border-green-600'}`}>
-            <h4 className="font-bold mb-2 flex items-center gap-2"><Leaf size={16}/> {t.what_means}</h4>
-          <p className="mb-4">{formatTextWithBulletsAndBold(result.meaning)}</p>
-          <h4 className="font-bold mb-2 flex items-center gap-2"><Activity size={16}/> {t.action}</h4>
-          <p className="mb-4">{formatTextWithBulletsAndBold(result.action)}</p>
-            <h4 className="font-bold mb-2">{t.crops}</h4>
-            <div className="flex flex-wrap gap-2">
-              {result.crops.map(crop => (<span key={crop} className={`text-xs px-2 py-1 rounded-md font-medium ${theme.font === 'font-sans' ? 'bg-white/60 shadow-sm text-slate-800' : 'border border-green-500'}`}>{crop}</span>))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MetricBox({ label, value, status, theme }) {
-  return (
-    <div className={`p-4 rounded-xl border ${theme.font === 'font-sans' ? 'bg-white/30 border-white/20' : 'bg-black border-green-800'}`}>
-      <div className="text-xs opacity-60 font-semibold">{label}</div>
-      <div className="text-2xl font-bold my-1">{value}</div>
-      <div className={`text-xs font-bold ${theme.font === 'font-sans' ? 'text-red-600' : 'text-green-600'}`}>{status}</div>
-    </div>
-  );
-}
-
 function NewsPortal({ theme, t, lang, location, bandwidthMode }) {
   const [newsData, setNewsData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1261,6 +1110,8 @@ function ChatInterface({ theme, mode, t, lang, onClose }: { theme: any; mode: 'h
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -1270,7 +1121,64 @@ function ChatInterface({ theme, mode, t, lang, onClose }: { theme: any; mode: 'h
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const handleSend = async (e) => {
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      const audioChunks: Blob[] = [];
+
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
+        audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+          const base64Audio = (reader.result as string).split(',')[1];
+
+          // Add temporary speaking message
+          setMessages(prev => [...prev, { id: Date.now(), role: 'user', text: "🎤 [Audio Sent]" }]);
+
+          try {
+            setIsTyping(true);
+            const response = await fetch('/api/gemini-proxy', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                prompt: "Transcribe this audio exactly. If it is in an Indian language, translate it to English.",
+                audioData: base64Audio,
+                mimeType: 'audio/webm',
+              }),
+            });
+
+            const data = await response.json();
+            const botResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, could not transcribe.";
+            setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: botResponse }]);
+          } catch (err) {
+            console.error("Audio error", err);
+            setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: "Error transcribing audio." }]);
+          } finally {
+            setIsTyping(false);
+          }
+        };
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert("Microphone permission denied or error");
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
     const userMsg = { id: Date.now(), role: 'user', text: input };
@@ -1280,17 +1188,17 @@ function ChatInterface({ theme, mode, t, lang, onClose }: { theme: any; mode: 'h
     try {
       const targetLangName = SUPPORTED_LANGUAGES.find(l => l.code === lang)?.name || 'English';
       const prompt = `You are an agricultural advisor. User Question: "${userMsg.text}" Constraints: 1. Reply in ${targetLangName} language. 2. If mode is 'low', keep reply extremely concise, keyword based, uppercase. 3. If mode is 'high', be conversational and helpful. 4. Mode is currently: '${mode}'. Reply with just the text.`;
-    const response = await fetch('/api/gemini-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
-    });
-    const data = await response.json();
-    const botResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Server Busy. Try again.";
-    setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: botResponse }]);
-  } catch (error) {
-    setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: "Error connecting to AI." }]);
-  } finally { setIsTyping(false); }
+      const response = await fetch('/api/gemini-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await response.json();
+      const botResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Server Busy. Try again.";
+      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: botResponse }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: "Error connecting to AI." }]);
+    } finally { setIsTyping(false); }
   };
 
   return (
@@ -1338,9 +1246,28 @@ function ChatInterface({ theme, mode, t, lang, onClose }: { theme: any; mode: 'h
         />
       </div>
       <form onSubmit={handleSend} className={`p-4 rounded-b-3xl border-b border-x ${theme.font === 'font-sans' ? 'glass-panel border-white/20' : 'bg-black border-green-900'} flex gap-2`}>
-        
+
         <input type="text" value={input} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)} placeholder={mode === 'high' ? t.chat_placeholder : t.chat_placeholder_low} className={`flex-1 p-4 rounded-xl outline-none border transition-colors ${theme.input} ${theme.font === 'font-mono' ? 'border-green-800' : ''}`} />
-        <button type="submit" disabled={!input.trim()} className={`p-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${theme.button}`}><Send size={24} /></button>
+        
+        <button
+          type="button"
+          onClick={() => {
+            if (isRecording) {
+              stopRecording();
+            } else {
+              startRecording();
+            }
+          }}
+          className={`p-4 rounded-xl transition-colors ${isRecording ? 'bg-red-600 text-white' : theme.button}`}
+          title={isRecording ? "Stop Recording" : "Start Recording"}
+          aria-label={isRecording ? "Stop Recording" : "Start Recording"}
+        >
+          {isRecording ? <Square size={24} /> : <Mic size={24} />}
+        </button>
+
+        <button type="submit" disabled={!input.trim()} className={`p-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${theme.button}`}>
+          <Send size={24} />
+        </button>
       </form>
     </div>
   );
